@@ -1,6 +1,6 @@
 "use client";
 
-import React, { createContext, useContext, useEffect, useState } from "react";
+import React, { createContext, useContext, useEffect, useState, useCallback } from "react";
 import {
   User,
   signInWithPopup,
@@ -11,7 +11,16 @@ import {
   onAuthStateChanged,
 } from "firebase/auth";
 import { doc, getDoc, setDoc } from "firebase/firestore";
-import { auth, db, googleProvider, isFirebaseConfigured } from "@/lib/firebase";
+import {
+  auth,
+  db,
+  googleProvider,
+  isFirebaseConfigured,
+  getEffectiveFirebaseCredentials,
+  reinitializeFirebaseWithConfig,
+  clearCustomFirebaseConfig,
+  FirebaseCredentials,
+} from "@/lib/firebase";
 import { UserProfile, UserRole } from "@/types";
 
 interface AuthContextType {
@@ -19,6 +28,7 @@ interface AuthContextType {
   profile: UserProfile | null;
   loading: boolean;
   isFirebaseConfigured: boolean;
+  firebaseConfigSource: "env" | "custom" | "demo";
   isDemoSession: boolean;
   signInWithGoogle: () => Promise<{ success: boolean; error?: string }>;
   signInWithEmail: (email: string, pass: string) => Promise<{ success: boolean; error?: string }>;
@@ -26,6 +36,8 @@ interface AuthContextType {
   signOutUser: () => Promise<void>;
   loginAsDemo: (role?: UserRole) => void;
   updateLocalProfile: (updates: Partial<UserProfile>) => void;
+  configureCustomFirebase: (creds: FirebaseCredentials) => Promise<{ success: boolean; error?: string }>;
+  resetFirebaseConfig: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -59,9 +71,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [isDemoSession, setIsDemoSession] = useState<boolean>(false);
+  const [configSource, setConfigSource] = useState<"env" | "custom" | "demo">("demo");
+  const [configured, setConfigured] = useState<boolean>(false);
+
+  // Sync config detection
+  const syncConfigStatus = useCallback(() => {
+    const effective = getEffectiveFirebaseCredentials();
+    setConfigSource(effective.source);
+    setConfigured(effective.isConfigured);
+  }, []);
 
   // Restore stored demo session on refresh if any
   useEffect(() => {
+    syncConfigStatus();
     if (typeof window !== "undefined") {
       const storedDemo = localStorage.getItem("messmate_demo_user");
       if (storedDemo) {
@@ -74,11 +96,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         }
       }
     }
-  }, []);
+  }, [syncConfigStatus]);
 
   // Firebase auth state listener
   useEffect(() => {
-    if (!auth || !isFirebaseConfigured) {
+    if (!auth) {
       setLoading(false);
       return;
     }
@@ -87,45 +109,43 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser(currentUser);
       if (currentUser) {
         setIsDemoSession(false);
-        try {
-          if (db) {
+
+        // Fallback default profile derived from real Google/Firebase auth
+        let studentProfile: UserProfile = {
+          uid: currentUser.uid,
+          name: currentUser.displayName || currentUser.email?.split("@")[0] || "Student",
+          email: currentUser.email || "",
+          photoURL: currentUser.photoURL || undefined,
+          phone: currentUser.phoneNumber || undefined,
+          role: "student",
+          college: "DBS Global University",
+          pgAddress: "Manduwala PG Corridor, Dehradun",
+          createdAt: new Date().toISOString(),
+        };
+
+        // Attempt Firestore persistence and fetch, but never let Firestore failure crash auth
+        if (db) {
+          try {
             const userDocRef = doc(db, "users", currentUser.uid);
             const userDoc = await getDoc(userDocRef);
 
             if (userDoc.exists()) {
-              setProfile(userDoc.data() as UserProfile);
+              studentProfile = { ...studentProfile, ...(userDoc.data() as UserProfile) };
             } else {
-              // Create new user profile in Firestore
-              const newProfile: UserProfile = {
-                uid: currentUser.uid,
-                name: currentUser.displayName || currentUser.email?.split("@")[0] || "Student",
-                email: currentUser.email || "",
-                photoURL: currentUser.photoURL || undefined,
-                phone: currentUser.phoneNumber || undefined,
-                role: "student",
-                college: "DBS Global University",
-                pgAddress: "Manduwala PG Corridor, Dehradun",
-                createdAt: new Date().toISOString(),
-              };
-              await setDoc(userDocRef, newProfile);
-              setProfile(newProfile);
+              try {
+                await setDoc(userDocRef, studentProfile);
+              } catch (writeErr) {
+                console.warn("Firestore user profile save notice (will use in-memory profile):", writeErr);
+              }
             }
+          } catch (err) {
+            console.warn("Firestore profile read notice (will use Google profile):", err);
           }
-        } catch (err) {
-          console.error("Error retrieving user profile from Firestore:", err);
-          // Fallback basic profile
-          setProfile({
-            uid: currentUser.uid,
-            name: currentUser.displayName || currentUser.email?.split("@")[0] || "Student",
-            email: currentUser.email || "",
-            photoURL: currentUser.photoURL || undefined,
-            role: "student",
-            createdAt: new Date().toISOString(),
-          });
         }
+
+        setProfile(studentProfile);
       } else {
-        // If not in demo mode, clear profile
-        if (!localStorage.getItem("messmate_demo_user")) {
+        if (typeof window !== "undefined" && !localStorage.getItem("messmate_demo_user")) {
           setProfile(null);
         }
       }
@@ -133,16 +153,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     });
 
     return () => unsubscribe();
-  }, []);
+  }, [configured]);
 
-  // Real Google Sign In Flow
+  // Real Google OAuth Sign In Flow
   const signInWithGoogle = async (): Promise<{ success: boolean; error?: string }> => {
-    if (!auth || !googleProvider || !isFirebaseConfigured) {
-      // Auto-fallback to rich demo login if credentials missing
-      loginAsDemo("student");
+    const effective = getEffectiveFirebaseCredentials();
+    if (!effective.isConfigured || !auth || !googleProvider) {
       return {
-        success: true,
-        error: "Firebase keys not set in .env.local; switched to interactive demo session.",
+        success: false,
+        error:
+          "FIREBASE_NOT_CONFIGURED: Firebase credentials are not set. Please add your Firebase configuration in the setup modal to enable real Google OAuth.",
       };
     }
 
@@ -151,31 +171,66 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const result = await signInWithPopup(auth, googleProvider);
       const authedUser = result.user;
 
-      if (db) {
-        const userDocRef = doc(db, "users", authedUser.uid);
-        const userDoc = await getDoc(userDocRef);
+      let studentProfile: UserProfile = {
+        uid: authedUser.uid,
+        name: authedUser.displayName || authedUser.email?.split("@")[0] || "Student",
+        email: authedUser.email || "",
+        photoURL: authedUser.photoURL || undefined,
+        phone: authedUser.phoneNumber || undefined,
+        role: "student",
+        college: "DBS Global University",
+        pgAddress: "Manduwala / Kandoli PG Corridor, Dehradun",
+        createdAt: new Date().toISOString(),
+      };
 
-        if (!userDoc.exists()) {
-          const newProfile: UserProfile = {
-            uid: authedUser.uid,
-            name: authedUser.displayName || "Student",
-            email: authedUser.email || "",
-            photoURL: authedUser.photoURL || undefined,
-            role: "student",
-            college: "DBS Global University",
-            pgAddress: "Dehradun PG Area",
-            createdAt: new Date().toISOString(),
-          };
-          await setDoc(userDocRef, newProfile);
-          setProfile(newProfile);
-        } else {
-          setProfile(userDoc.data() as UserProfile);
+      if (db) {
+        try {
+          const userDocRef = doc(db, "users", authedUser.uid);
+          const userDoc = await getDoc(userDocRef);
+          if (userDoc.exists()) {
+            studentProfile = { ...studentProfile, ...(userDoc.data() as UserProfile) };
+          } else {
+            try {
+              await setDoc(userDocRef, studentProfile);
+            } catch (wErr) {
+              console.warn("Firestore initial user save notice:", wErr);
+            }
+          }
+        } catch (dbErr) {
+          console.warn("Firestore profile sync skipped (using Google OAuth profile):", dbErr);
         }
       }
+
+      setUser(authedUser);
+      setProfile(studentProfile);
+      setIsDemoSession(false);
       return { success: true };
     } catch (err: unknown) {
-      const errorMsg = err instanceof Error ? err.message : "Failed to sign in with Google";
-      console.error("Google sign in error:", err);
+      console.error("Google sign in error details:", err);
+      let errorMsg = "Failed to sign in with Google.";
+
+      const anyErr = err as { code?: string; message?: string };
+      const code = anyErr?.code || "";
+
+      if (code === "auth/unauthorized-domain") {
+        const currentDomain = typeof window !== "undefined" ? window.location.hostname : "your Vercel domain";
+        errorMsg = `Domain unauthorized: In Firebase Console, go to Authentication > Settings > Authorized domains, and add "${currentDomain}".`;
+      } else if (code === "auth/popup-closed-by-user") {
+        errorMsg = "Sign-in popup was closed before completing. Please try again.";
+      } else if (code === "auth/popup-blocked") {
+        errorMsg = "The sign-in popup was blocked by your browser. Please allow popups for this site and click Continue with Google again.";
+      } else if (code === "auth/operation-not-allowed") {
+        errorMsg = "Google Sign-In is disabled in your Firebase project. In Firebase Console, go to Authentication > Sign-in method, click Google, and enable it.";
+      } else if (code === "auth/invalid-api-key" || code === "auth/api-key-not-valid") {
+        errorMsg = "Invalid Firebase API Key. Please verify your NEXT_PUBLIC_FIREBASE_API_KEY.";
+      } else if (code === "auth/cancelled-popup-request") {
+        errorMsg = "Another authentication window is already open. Please complete or close it first.";
+      } else if (code === "auth/network-request-failed") {
+        errorMsg = "Network error while connecting to Google. Please check your internet connection.";
+      } else if (anyErr?.message) {
+        errorMsg = anyErr.message;
+      }
+
       return { success: false, error: errorMsg };
     } finally {
       setLoading(false);
@@ -184,7 +239,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   // Real Email & Password Login
   const signInWithEmail = async (email: string, pass: string): Promise<{ success: boolean; error?: string }> => {
-    if (!auth || !isFirebaseConfigured) {
+    const effective = getEffectiveFirebaseCredentials();
+    if (!effective.isConfigured || !auth) {
+      // Demo fallback
       if (email.toLowerCase().includes("admin")) {
         loginAsDemo("admin");
       } else {
@@ -197,15 +254,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setLoading(true);
       const res = await signInWithEmailAndPassword(auth, email, pass);
       if (db) {
-        const userDocRef = doc(db, "users", res.user.uid);
-        const docSnap = await getDoc(userDocRef);
-        if (docSnap.exists()) {
-          setProfile(docSnap.data() as UserProfile);
+        try {
+          const userDocRef = doc(db, "users", res.user.uid);
+          const docSnap = await getDoc(userDocRef);
+          if (docSnap.exists()) {
+            setProfile(docSnap.data() as UserProfile);
+          }
+        } catch (e) {
+          console.warn("Firestore profile read notice:", e);
         }
       }
       return { success: true };
     } catch (err: unknown) {
-      const errorMsg = err instanceof Error ? err.message : "Invalid email or password.";
+      const anyErr = err as { code?: string; message?: string };
+      let errorMsg = "Invalid email or password.";
+      if (anyErr?.code === "auth/user-not-found" || anyErr?.code === "auth/wrong-password" || anyErr?.code === "auth/invalid-credential") {
+        errorMsg = "Invalid email or password. Please verify your credentials or register.";
+      } else if (anyErr?.message) {
+        errorMsg = anyErr.message;
+      }
       return { success: false, error: errorMsg };
     } finally {
       setLoading(false);
@@ -219,7 +286,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     pass: string,
     role: UserRole = "student"
   ): Promise<{ success: boolean; error?: string }> => {
-    if (!auth || !isFirebaseConfigured) {
+    const effective = getEffectiveFirebaseCredentials();
+    if (!effective.isConfigured || !auth) {
       const demoUser: UserProfile = {
         ...DEMO_STUDENT,
         name,
@@ -228,14 +296,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       };
       setProfile(demoUser);
       setIsDemoSession(true);
-      localStorage.setItem("messmate_demo_user", JSON.stringify(demoUser));
+      if (typeof window !== "undefined") {
+        localStorage.setItem("messmate_demo_user", JSON.stringify(demoUser));
+      }
       return { success: true };
     }
 
     try {
       setLoading(true);
       const res = await createUserWithEmailAndPassword(auth, email, pass);
-      await updateProfile(res.user, { displayName: name });
+      try {
+        await updateProfile(res.user, { displayName: name });
+      } catch (upErr) {
+        console.warn("Profile name update notice:", upErr);
+      }
 
       const newProfile: UserProfile = {
         uid: res.user.uid,
@@ -248,12 +322,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       };
 
       if (db) {
-        await setDoc(doc(db, "users", res.user.uid), newProfile);
+        try {
+          await setDoc(doc(db, "users", res.user.uid), newProfile);
+        } catch (dbErr) {
+          console.warn("Firestore profile write notice:", dbErr);
+        }
       }
       setProfile(newProfile);
       return { success: true };
     } catch (err: unknown) {
-      const errorMsg = err instanceof Error ? err.message : "Registration failed";
+      const anyErr = err as { code?: string; message?: string };
+      let errorMsg = "Registration failed.";
+      if (anyErr?.code === "auth/email-already-in-use") {
+        errorMsg = "This email address is already registered. Please sign in instead.";
+      } else if (anyErr?.code === "auth/weak-password") {
+        errorMsg = "Password should be at least 6 characters long.";
+      } else if (anyErr?.message) {
+        errorMsg = anyErr.message;
+      }
       return { success: false, error: errorMsg };
     } finally {
       setLoading(false);
@@ -262,7 +348,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   // Sign out
   const signOutUser = async () => {
-    if (auth && isFirebaseConfigured) {
+    if (auth && configured) {
       try {
         await signOut(auth);
       } catch (err) {
@@ -277,7 +363,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  // Interactive Demo login helper for instant testing & evaluation
+  // Interactive Demo login helper for instant evaluation
   const loginAsDemo = (role: UserRole = "student") => {
     const demoProfile = role === "admin" ? DEMO_ADMIN : DEMO_STUDENT;
     setProfile(demoProfile);
@@ -294,7 +380,42 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (isDemoSession && typeof window !== "undefined") {
         localStorage.setItem("messmate_demo_user", JSON.stringify(updated));
       }
+      // If real Firebase Firestore is active, sync updates asynchronously
+      if (db && user && !isDemoSession) {
+        try {
+          setDoc(doc(db, "users", user.uid), updates, { merge: true }).catch((e) =>
+            console.warn("Async profile update notice:", e)
+          );
+        } catch (e) {
+          console.warn("Firestore update notice:", e);
+        }
+      }
     }
+  };
+
+  // Configure custom Firebase credentials in browser
+  const configureCustomFirebase = async (
+    creds: FirebaseCredentials
+  ): Promise<{ success: boolean; error?: string }> => {
+    try {
+      setLoading(true);
+      await reinitializeFirebaseWithConfig(creds);
+      syncConfigStatus();
+      setLoading(false);
+      return { success: true };
+    } catch (err: unknown) {
+      setLoading(false);
+      const msg = err instanceof Error ? err.message : "Failed to initialize Firebase credentials.";
+      return { success: false, error: msg };
+    }
+  };
+
+  // Reset custom Firebase config
+  const resetFirebaseConfig = async () => {
+    setLoading(true);
+    await clearCustomFirebaseConfig();
+    syncConfigStatus();
+    setLoading(false);
   };
 
   return (
@@ -303,7 +424,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         user,
         profile,
         loading,
-        isFirebaseConfigured,
+        isFirebaseConfigured: configured,
+        firebaseConfigSource: configSource,
         isDemoSession,
         signInWithGoogle,
         signInWithEmail,
@@ -311,6 +433,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         signOutUser,
         loginAsDemo,
         updateLocalProfile,
+        configureCustomFirebase,
+        resetFirebaseConfig,
       }}
     >
       {children}
@@ -325,4 +449,3 @@ export function useAuth() {
   }
   return context;
 }
-
