@@ -38,6 +38,7 @@ function LoginFormContent() {
     loginAsDemo,
     isFirebaseConfigured,
     firebaseConfigSource,
+    envCredentialsStatus,
     configureCustomFirebase,
     resetFirebaseConfig,
   } = useAuth();
@@ -772,29 +773,45 @@ function LoginFormContent() {
                     { key: "NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET", desc: "e.g. your-project.appspot.com" },
                     { key: "NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID", desc: "Numeric Sender ID" },
                     { key: "NEXT_PUBLIC_FIREBASE_APP_ID", desc: "e.g. 1:123456789:web:abcdef" },
-                  ].map((item) => (
-                    <div
-                      key={item.key}
-                      className="p-2.5 rounded-xl bg-slate-50 border border-brand-border flex items-center justify-between gap-2"
-                    >
-                      <div className="space-y-0.5">
-                        <code className="font-mono font-bold text-brand-primary block">{item.key}</code>
-                        <span className="text-[11px] text-brand-muted">{item.desc}</span>
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => copyToClipboard(item.key, item.key)}
-                        className="p-1.5 rounded-lg border border-brand-border bg-white hover:bg-slate-100 text-brand-dark transition-colors cursor-pointer"
-                        title="Copy variable name"
+                  ].map((item) => {
+                    const isDetected = envCredentialsStatus && envCredentialsStatus[item.key];
+                    return (
+                      <div
+                        key={item.key}
+                        className={`p-2.5 rounded-xl border flex items-center justify-between gap-2 ${
+                          isDetected ? "bg-emerald-50/60 border-emerald-200" : "bg-slate-50 border-brand-border"
+                        }`}
                       >
-                        {copiedKey === item.key ? (
-                          <Check className="w-3.5 h-3.5 text-emerald-600" />
-                        ) : (
-                          <Copy className="w-3.5 h-3.5 text-brand-muted" />
-                        )}
-                      </button>
-                    </div>
-                  ))}
+                        <div className="space-y-0.5">
+                          <div className="flex items-center gap-2">
+                            <code className="font-mono font-bold text-brand-primary block">{item.key}</code>
+                            <span
+                              className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${
+                                isDetected
+                                  ? "bg-emerald-100 text-emerald-800"
+                                  : "bg-amber-100 text-amber-900"
+                              }`}
+                            >
+                              {isDetected ? "Detected in Build" : "Not Set"}
+                            </span>
+                          </div>
+                          <span className="text-[11px] text-brand-muted">{item.desc}</span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => copyToClipboard(item.key, item.key)}
+                          className="p-1.5 rounded-lg border border-brand-border bg-white hover:bg-slate-100 text-brand-dark transition-colors cursor-pointer"
+                          title="Copy variable name"
+                        >
+                          {copiedKey === item.key ? (
+                            <Check className="w-3.5 h-3.5 text-emerald-600" />
+                          ) : (
+                            <Copy className="w-3.5 h-3.5 text-brand-muted" />
+                          )}
+                        </button>
+                      </div>
+                    );
+                  })}
                 </div>
 
                 <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-900 text-xs">

@@ -29,6 +29,7 @@ interface AuthContextType {
   loading: boolean;
   isFirebaseConfigured: boolean;
   firebaseConfigSource: "env" | "custom" | "demo";
+  envCredentialsStatus: { [key: string]: boolean };
   isDemoSession: boolean;
   signInWithGoogle: () => Promise<{ success: boolean; error?: string }>;
   signInWithEmail: (email: string, pass: string) => Promise<{ success: boolean; error?: string }>;
@@ -73,12 +74,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isDemoSession, setIsDemoSession] = useState<boolean>(false);
   const [configSource, setConfigSource] = useState<"env" | "custom" | "demo">("demo");
   const [configured, setConfigured] = useState<boolean>(false);
+  const [envStatus, setEnvStatus] = useState<{ [key: string]: boolean }>({});
 
   // Sync config detection
   const syncConfigStatus = useCallback(() => {
     const effective = getEffectiveFirebaseCredentials();
     setConfigSource(effective.source);
     setConfigured(effective.isConfigured);
+
+    if (typeof window !== "undefined") {
+      setEnvStatus({
+        NEXT_PUBLIC_FIREBASE_API_KEY: Boolean(process.env.NEXT_PUBLIC_FIREBASE_API_KEY),
+        NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: Boolean(process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN),
+        NEXT_PUBLIC_FIREBASE_PROJECT_ID: Boolean(process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID),
+        NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET: Boolean(process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET),
+        NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: Boolean(process.env.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID),
+        NEXT_PUBLIC_FIREBASE_APP_ID: Boolean(process.env.NEXT_PUBLIC_FIREBASE_APP_ID),
+      });
+    }
   }, []);
 
   // Restore stored demo session on refresh if any
@@ -426,6 +439,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         loading,
         isFirebaseConfigured: configured,
         firebaseConfigSource: configSource,
+        envCredentialsStatus: envStatus,
         isDemoSession,
         signInWithGoogle,
         signInWithEmail,
