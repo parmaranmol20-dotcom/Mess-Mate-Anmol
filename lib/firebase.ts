@@ -11,6 +11,16 @@ export interface FirebaseCredentials {
   appId: string;
 }
 
+// Real MessMate Firebase Project Credentials (public web app config)
+export const DEFAULT_FIREBASE_CREDENTIALS: FirebaseCredentials = {
+  apiKey: "AIzaSyDurkq0_qi65NH5XzTHO26XOoidGq5GhJQ",
+  authDomain: "mess-mate-anmolvercel.firebaseapp.com",
+  projectId: "mess-mate-anmolvercel",
+  storageBucket: "mess-mate-anmolvercel.firebasestorage.app",
+  messagingSenderId: "342665441183",
+  appId: "1:342665441183:web:ffb5e183fa06eade8b97aa",
+};
+
 export function getEnvFirebaseCredentials(): FirebaseCredentials {
   return {
     apiKey: (process.env.NEXT_PUBLIC_FIREBASE_API_KEY || "").trim(),
@@ -46,7 +56,7 @@ export function getCustomFirebaseCredentials(): FirebaseCredentials | null {
 
 export function getEffectiveFirebaseCredentials(): {
   credentials: FirebaseCredentials;
-  source: "env" | "custom" | "demo";
+  source: "env" | "custom" | "default";
   isConfigured: boolean;
 } {
   const envCreds = getEnvFirebaseCredentials();
@@ -72,17 +82,11 @@ export function getEffectiveFirebaseCredentials(): {
     };
   }
 
+  // Use the verified production MessMate credentials
   return {
-    credentials: {
-      apiKey: "demo-api-key-messmate-preview",
-      authDomain: "messmate-demo.firebaseapp.com",
-      projectId: "messmate-demo",
-      storageBucket: "messmate-demo.appspot.com",
-      messagingSenderId: "1234567890",
-      appId: "1:1234567890:web:demoapppreview",
-    },
-    source: "demo",
-    isConfigured: false,
+    credentials: DEFAULT_FIREBASE_CREDENTIALS,
+    source: "default",
+    isConfigured: true,
   };
 }
 
@@ -90,7 +94,7 @@ let app: FirebaseApp | undefined;
 let auth: Auth | undefined;
 let db: Firestore | undefined;
 let googleProvider: GoogleAuthProvider | undefined;
-let isFirebaseConfigured: boolean = false;
+let isFirebaseConfigured: boolean = true;
 
 export function initFirebase(customCreds?: FirebaseCredentials) {
   const effective = customCreds
@@ -162,7 +166,7 @@ export async function clearCustomFirebaseConfig() {
 }
 
 // Initial bootstrap
-if (typeof window !== "undefined" || process.env.NEXT_PUBLIC_FIREBASE_API_KEY) {
+if (typeof window !== "undefined" || process.env.NEXT_PUBLIC_FIREBASE_API_KEY || DEFAULT_FIREBASE_CREDENTIALS.apiKey) {
   initFirebase();
 }
 

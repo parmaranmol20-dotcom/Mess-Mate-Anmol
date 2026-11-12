@@ -28,7 +28,7 @@ interface AuthContextType {
   profile: UserProfile | null;
   loading: boolean;
   isFirebaseConfigured: boolean;
-  firebaseConfigSource: "env" | "custom" | "demo";
+  firebaseConfigSource: "env" | "custom" | "default" | "demo";
   envCredentialsStatus: { [key: string]: boolean };
   isDemoSession: boolean;
   signInWithGoogle: () => Promise<{ success: boolean; error?: string }>;
@@ -72,7 +72,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
   const [isDemoSession, setIsDemoSession] = useState<boolean>(false);
-  const [configSource, setConfigSource] = useState<"env" | "custom" | "demo">("demo");
+  const [configSource, setConfigSource] = useState<"env" | "custom" | "default" | "demo">("default");
   const [configured, setConfigured] = useState<boolean>(false);
   const [envStatus, setEnvStatus] = useState<{ [key: string]: boolean }>({});
 
