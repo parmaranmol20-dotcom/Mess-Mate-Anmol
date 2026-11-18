@@ -93,7 +93,7 @@ export const DEMO_KITCHENS: Kitchen[] = [
   },
 ];
 
-// Demo Meals (Stored with realistic high quality food photography and clear demo flags)
+// Demo Meals (Stored with realistic high quality food photography matching each exact dish)
 export const DEMO_MEALS: Meal[] = [
   {
     id: "meal-1",
@@ -102,7 +102,7 @@ export const DEMO_MEALS: Meal[] = [
     price: 90,
     category: "dal_rice",
     foodType: "veg",
-    imageURL: "https://images.unsplash.com/photo-1546833999-b9f581a1996d?auto=format&fit=crop&w=800&q=80",
+    imageURL: "https://images.unsplash.com/photo-1585937421612-70a008356fbe?auto=format&fit=crop&w=800&q=80",
     kitchenId: "kitch-1",
     kitchenName: "Annapurna Rasoi (Aunty's Kitchen)",
     kitchenLocation: "Manduwala, Dehradun",
@@ -120,7 +120,7 @@ export const DEMO_MEALS: Meal[] = [
     price: 100,
     category: "combo",
     foodType: "veg",
-    imageURL: "https://images.unsplash.com/photo-1589301760014-d929f3979dbc?auto=format&fit=crop&w=800&q=80",
+    imageURL: "https://images.unsplash.com/photo-1623690856012-85292929be28?auto=format&fit=crop&w=800&q=80",
     kitchenId: "kitch-2",
     kitchenName: "Doon Student Dabbawala",
     kitchenLocation: "Kandoli Hub, Dehradun",
@@ -146,6 +146,24 @@ export const DEMO_MEALS: Meal[] = [
     mealTiming: "lunch",
     portionInfo: "Serves 1 (250ml chole, 300g rice, 100ml raita)",
     ingredients: ["Kabuli Chana", "Basmati Rice", "Fresh Curd", "Boondi", "Ginger Juliennes"],
+    isPopular: true,
+    isDemo: true,
+  },
+  {
+    id: "meal-idli",
+    name: "South Indian Steamed Idli & Sambar",
+    description: "Cloud-soft, hot steamed rice idlis served with aromatic vegetable sambar, fresh coconut chutney, and spicy tomato chutney.",
+    price: 80,
+    category: "special",
+    foodType: "veg",
+    imageURL: "https://images.unsplash.com/photo-1741376509047-66dae5df90f9?auto=format&fit=crop&w=800&q=80",
+    kitchenId: "kitch-1",
+    kitchenName: "Annapurna Rasoi (Aunty's Kitchen)",
+    kitchenLocation: "Manduwala, Dehradun",
+    availability: true,
+    mealTiming: "both",
+    portionInfo: "Serves 1 (4 large steamed idlis, 200ml hot sambar, 2 fresh chutneys)",
+    ingredients: ["Fermented Rice & Urad Batter", "Toor Dal Sambar", "Fresh Coconut Chutney", "Mustard & Curry Leaves"],
     isPopular: true,
     isDemo: true,
   },

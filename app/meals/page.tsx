@@ -34,6 +34,7 @@ export default function MealsMarketplacePage() {
     { id: "thali", label: "Homestyle Thalis" },
     { id: "dal_rice", label: "Dal & Rice" },
     { id: "combo", label: "Combos" },
+    { id: "special", label: "Specials & South Indian" },
     { id: "healthy", label: "Light & Healthy" },
   ];
 

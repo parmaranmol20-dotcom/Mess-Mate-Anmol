@@ -27,8 +27,8 @@ import {
 } from "@/types";
 
 const LOCAL_STORAGE_KEYS = {
-  meals: "messmate_stored_meals",
-  kitchens: "messmate_stored_kitchens",
+  meals: "messmate_stored_meals_v3",
+  kitchens: "messmate_stored_kitchens_v2",
   subscriptions: "messmate_stored_subscriptions",
   orders: "messmate_stored_orders",
   skipRequests: "messmate_stored_skips",
