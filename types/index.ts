@@ -85,6 +85,15 @@ export interface SkipRequest {
   createdAt: string;
 }
 
+export type OrderStatus =
+  | 'whatsapp_opened'
+  | 'pending'
+  | 'confirmed'
+  | 'preparing'
+  | 'out_for_delivery'
+  | 'delivered'
+  | 'cancelled';
+
 export interface OrderEnquiry {
   id: string;
   userId: string;
@@ -99,7 +108,7 @@ export interface OrderEnquiry {
   preferredDate: string;
   mealType: 'lunch' | 'dinner';
   deliveryAddress: string;
-  status: 'whatsapp_opened' | 'confirmed' | 'cancelled';
+  status: OrderStatus;
   createdAt: string;
   notes?: string;
 }

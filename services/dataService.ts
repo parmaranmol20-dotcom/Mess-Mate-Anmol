@@ -10,6 +10,8 @@ import {
   query,
   where,
   orderBy,
+  onSnapshot,
+  limit,
 } from "firebase/firestore";
 import { db, isFirebaseConfigured } from "@/lib/firebase";
 import { DEMO_KITCHENS, DEMO_MEALS, PRICING_CONFIG } from "@/lib/constants";
@@ -17,6 +19,7 @@ import {
   Kitchen,
   Meal,
   OrderEnquiry,
+  OrderStatus,
   PartnerApplication,
   SkipRequest,
   Subscription,
@@ -280,12 +283,12 @@ export async function updatePartnerApplicationStatus(
 // WHATSAPP ORDERS / ENQUIRIES
 // ==========================================
 export async function createOrderEnquiry(
-  data: Omit<OrderEnquiry, "id" | "createdAt" | "status">
+  data: Omit<OrderEnquiry, "id" | "createdAt" | "status"> & { status?: OrderStatus }
 ): Promise<OrderEnquiry> {
   const newOrder: OrderEnquiry = {
     id: "ord-" + Date.now(),
     ...data,
-    status: "whatsapp_opened",
+    status: data.status || "whatsapp_opened",
     createdAt: new Date().toISOString(),
   };
 
@@ -293,19 +296,110 @@ export async function createOrderEnquiry(
     try {
       const docRef = await addDoc(collection(db, "orders"), {
         ...data,
-        status: "whatsapp_opened",
+        status: newOrder.status,
         createdAt: newOrder.createdAt,
       });
-      return { ...newOrder, id: docRef.id };
+      newOrder.id = docRef.id;
     } catch (e) {
-      console.error("Firestore createOrderEnquiry error:", e);
+      console.warn("Firestore createOrderEnquiry fallback to local:", e);
     }
   }
 
   const current = getLocal<OrderEnquiry[]>(LOCAL_STORAGE_KEYS.orders, DEFAULT_DEMO_ORDERS);
   const updated = [newOrder, ...current];
   setLocal(LOCAL_STORAGE_KEYS.orders, updated);
+
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent("messmate_order_updated", { detail: newOrder }));
+  }
+
   return newOrder;
+}
+
+export async function updateOrderStatus(
+  orderId: string,
+  status: OrderStatus
+): Promise<void> {
+  if (db && isFirebaseConfigured) {
+    try {
+      await updateDoc(doc(db, "orders", orderId), { status });
+    } catch (e) {
+      console.warn("Firestore updateOrderStatus fallback to local:", e);
+    }
+  }
+
+  const current = getLocal<OrderEnquiry[]>(LOCAL_STORAGE_KEYS.orders, DEFAULT_DEMO_ORDERS);
+  const updated = current.map((o) => (o.id === orderId ? { ...o, status } : o));
+  setLocal(LOCAL_STORAGE_KEYS.orders, updated);
+
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(new CustomEvent("messmate_order_updated", { detail: { id: orderId, status } }));
+  }
+}
+
+export function subscribeToOrders(callback: (orders: OrderEnquiry[]) => void): () => void {
+  let unsubFirestore: (() => void) | undefined;
+
+  if (db && isFirebaseConfigured) {
+    try {
+      const q = query(collection(db, "orders"), orderBy("createdAt", "desc"));
+      unsubFirestore = onSnapshot(
+        q,
+        (snap) => {
+          if (!snap.empty) {
+            const list = snap.docs.map((d) => ({ id: d.id, ...d.data() } as OrderEnquiry));
+            callback(list);
+          } else {
+            // If collection is empty in Firestore, load local demo
+            callback(getLocal<OrderEnquiry[]>(LOCAL_STORAGE_KEYS.orders, DEFAULT_DEMO_ORDERS));
+          }
+        },
+        (err) => {
+          console.warn("Firestore onSnapshot error, falling back to local storage:", err);
+          callback(getLocal<OrderEnquiry[]>(LOCAL_STORAGE_KEYS.orders, DEFAULT_DEMO_ORDERS));
+        }
+      );
+    } catch (e) {
+      console.warn("Firestore subscribe notice:", e);
+    }
+  }
+
+  // Also listen for local custom events (for instant same-browser updates)
+  const handleLocalEvent = () => {
+    callback(getLocal<OrderEnquiry[]>(LOCAL_STORAGE_KEYS.orders, DEFAULT_DEMO_ORDERS));
+  };
+
+  if (typeof window !== "undefined") {
+    window.addEventListener("messmate_order_updated", handleLocalEvent);
+  }
+
+  return () => {
+    if (unsubFirestore) unsubFirestore();
+    if (typeof window !== "undefined") {
+      window.removeEventListener("messmate_order_updated", handleLocalEvent);
+    }
+  };
+}
+
+export async function checkFirestoreStatus(): Promise<{ connected: boolean; error?: string }> {
+  if (!db || !isFirebaseConfigured) {
+    return { connected: false, error: "Firebase credentials not active." };
+  }
+  try {
+    const testRef = collection(db, "orders");
+    await getDocs(query(testRef, limit(1)));
+    return { connected: true };
+  } catch (err: unknown) {
+    const anyErr = err as { code?: string; message?: string };
+    const code = anyErr?.code || "";
+    let msg = anyErr?.message || "Failed to reach Cloud Firestore.";
+    if (code === "permission-denied") {
+      msg = "Cloud Firestore permissions restricted. In Firebase Console > Firestore Database > Rules, set read/write to allow.";
+    } else if (code === "not-found") {
+      msg = "Cloud Firestore Database has not been created yet in Firebase project.";
+    }
+    return { connected: false, error: msg };
+  }
 }
 
 export async function getAllOrders(): Promise<OrderEnquiry[]> {

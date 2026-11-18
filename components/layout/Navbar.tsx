@@ -60,8 +60,16 @@ export function Navbar() {
             <span className="hidden md:inline text-white/80">Cutoff: Lunch 9:00 AM | Dinner 4:00 PM</span>
           </div>
 
-          <div className="hidden sm:flex items-center gap-1.5 text-brand-accent hover:underline">
-            <Link href="/meals" className="flex items-center gap-1">
+          <div className="hidden sm:flex items-center gap-2.5">
+            <Link
+              href="/admin"
+              className="text-white/80 hover:text-white flex items-center gap-1 font-semibold text-[11px] px-2 py-0.5 rounded bg-white/10 hover:bg-white/20 transition-colors"
+            >
+              <ShieldCheck className="w-3 h-3 text-emerald-300" />
+              <span>Admin Portal</span>
+            </Link>
+            <span className="text-white/40">•</span>
+            <Link href="/meals" className="flex items-center gap-1 text-brand-accent hover:underline">
               <span>Today's Thalis</span>
               <ChevronRight className="w-3 h-3" />
             </Link>
@@ -222,21 +230,31 @@ export function Navbar() {
                   </button>
                 </>
               ) : (
-                <div className="grid grid-cols-2 gap-2">
+                <div className="space-y-2">
+                  <div className="grid grid-cols-2 gap-2">
+                    <Link
+                      href="/login"
+                      onClick={() => setMobileMenuOpen(false)}
+                      className="btn-secondary py-2.5 text-center text-xs font-bold rounded-xl"
+                    >
+                      Sign In
+                    </Link>
+                    <Link
+                      href="/login?mode=signup"
+                      onClick={() => setMobileMenuOpen(false)}
+                      className="btn-primary py-2.5 text-center text-xs font-bold rounded-xl flex items-center justify-center gap-1"
+                    >
+                      <span>Get Started</span>
+                      <ArrowRight className="w-3.5 h-3.5" />
+                    </Link>
+                  </div>
                   <Link
-                    href="/login"
+                    href="/admin"
                     onClick={() => setMobileMenuOpen(false)}
-                    className="btn-secondary py-2.5 text-center text-xs font-bold rounded-xl"
+                    className="flex items-center justify-center gap-1.5 w-full py-2 bg-slate-900 text-slate-200 text-xs font-semibold rounded-xl"
                   >
-                    Sign In
-                  </Link>
-                  <Link
-                    href="/login?mode=signup"
-                    onClick={() => setMobileMenuOpen(false)}
-                    className="btn-primary py-2.5 text-center text-xs font-bold rounded-xl flex items-center justify-center gap-1"
-                  >
-                    <span>Get Started</span>
-                    <ArrowRight className="w-3.5 h-3.5" />
+                    <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>Admin Operations Portal</span>
                   </Link>
                 </div>
               )}

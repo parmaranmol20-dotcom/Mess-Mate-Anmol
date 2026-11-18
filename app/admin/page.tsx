@@ -21,6 +21,10 @@ import {
   updatePricingConfig,
   updateSkipRequestStatus,
   resetToDemoDefaults,
+  subscribeToOrders,
+  updateOrderStatus,
+  checkFirestoreStatus,
+  createOrderEnquiry,
 } from "@/services/dataService";
 import {
   Meal,
@@ -28,6 +32,7 @@ import {
   PartnerApplication,
   Subscription,
   OrderEnquiry,
+  OrderStatus,
   SkipRequest,
 } from "@/types";
 import { formatCurrency, formatDate } from "@/lib/utils";
@@ -41,6 +46,7 @@ import {
   Trash2,
   Edit,
   CheckCircle,
+  CheckCircle2,
   XCircle,
   AlertCircle,
   Settings,
@@ -51,6 +57,12 @@ import {
   MessageCircle,
   ArrowRight,
   Filter,
+  Phone,
+  ExternalLink,
+  Bell,
+  Truck,
+  CookingPot,
+  Radio,
 } from "lucide-react";
 
 export default function AdminDashboardPage() {
@@ -69,6 +81,13 @@ export default function AdminDashboardPage() {
   const [orders, setOrders] = useState<OrderEnquiry[]>([]);
   const [skips, setSkips] = useState<SkipRequest[]>([]);
   const [pricing, setPricing] = useState(getPricingConfig());
+
+  // Real-time backend states
+  const [firestoreStatus, setFirestoreStatus] = useState<{ connected: boolean; error?: string } | null>(null);
+  const [showFirestoreHelp, setShowFirestoreHelp] = useState(false);
+  const [orderFilter, setOrderFilter] = useState<string>("all");
+  const [newOrderAlert, setNewOrderAlert] = useState<string | null>(null);
+  const [isSimulating, setIsSimulating] = useState(false);
 
   // Meal Form modal
   const [mealModalOpen, setMealModalOpen] = useState(false);
@@ -119,7 +138,59 @@ export default function AdminDashboardPage() {
 
   useEffect(() => {
     loadAllAdminData();
+    checkFirestoreStatus().then((res) => setFirestoreStatus(res));
+
+    const unsubscribe = subscribeToOrders((liveOrders) => {
+      setOrders((prev) => {
+        if (prev.length > 0 && liveOrders.length > prev.length) {
+          const newest = liveOrders[0];
+          setNewOrderAlert(`🍱 New Live Order from ${newest.userName}: ${newest.mealName} (₹${newest.amount})`);
+          setTimeout(() => setNewOrderAlert(null), 7000);
+        }
+        return liveOrders;
+      });
+    });
+
+    return () => unsubscribe();
   }, []);
+
+  const handleUpdateOrderStatus = async (orderId: string, status: OrderStatus) => {
+    await updateOrderStatus(orderId, status);
+  };
+
+  const handleSimulateOrder = async () => {
+    setIsSimulating(true);
+    const demoStudentNames = [
+      "Rohan Verma",
+      "Sneha Rawat",
+      "Karan Bisht",
+      "Priya Negi",
+      "Ananya Joshi",
+      "Aarav Sharma",
+      "Devansh Pant",
+    ];
+    const randomName = demoStudentNames[Math.floor(Math.random() * demoStudentNames.length)];
+    const randomMeal = meals.length > 0 ? meals[Math.floor(Math.random() * meals.length)] : null;
+
+    await createOrderEnquiry({
+      userId: "test-user-" + Date.now(),
+      userName: randomName,
+      userPhone: "+91 98971 " + Math.floor(10000 + Math.random() * 90000),
+      mealId: randomMeal ? randomMeal.id : "meal-1",
+      mealName: randomMeal ? randomMeal.name : "Doon Special Rajma Chawal Thali",
+      kitchenId: randomMeal ? randomMeal.kitchenId : "kitch-1",
+      kitchenName: randomMeal ? randomMeal.kitchenName : "Annapurna Rasoi (Aunty's Kitchen)",
+      quantity: 1,
+      amount: randomMeal ? randomMeal.price : 100,
+      preferredDate: new Date().toISOString().split("T")[0],
+      mealType: Math.random() > 0.5 ? "lunch" : "dinner",
+      deliveryAddress: `Room ${Math.floor(101 + Math.random() * 300)}, Devbhoomi PG, Manduwala`,
+      status: "confirmed",
+      notes: "Please pack extra green chutney",
+    });
+
+    setIsSimulating(false);
+  };
 
   // Handlers for Partner Applications
   const handlePartnerAction = async (id: string, status: "approved" | "rejected") => {
@@ -367,6 +438,69 @@ export default function AdminDashboardPage() {
                 <Plus className="w-4 h-4" />
                 <span>Add New Meal</span>
               </button>
+            </div>
+          </div>
+
+          {/* Real-time Order Arrival Alert */}
+          {newOrderAlert && (
+            <div className="p-4 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-600 text-white font-bold text-sm flex items-center justify-between shadow-xl animate-pulse">
+              <div className="flex items-center gap-2.5">
+                <Bell className="w-5 h-5 animate-bounce" />
+                <span>{newOrderAlert}</span>
+              </div>
+              <button
+                onClick={() => {
+                  setActiveTab("orders");
+                  setNewOrderAlert(null);
+                }}
+                className="px-3.5 py-1.5 bg-white text-emerald-950 rounded-xl text-xs font-bold hover:bg-slate-100 transition-colors shadow-xs"
+              >
+                View in Dispatch Board →
+              </button>
+            </div>
+          )}
+
+          {/* Real-time Cloud Backend Sync Status Bar */}
+          <div className="p-3.5 rounded-2xl bg-slate-950/80 border border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
+            <div className="flex items-center gap-2.5">
+              <Radio
+                className={`w-4 h-4 shrink-0 ${
+                  firestoreStatus?.connected ? "text-emerald-400 animate-pulse" : "text-amber-400"
+                }`}
+              />
+              <div>
+                <span className="font-bold text-slate-200">
+                  Backend Status:{" "}
+                  <span className={firestoreStatus?.connected ? "text-emerald-400" : "text-amber-400"}>
+                    {firestoreStatus?.connected ? "Cloud Firestore Active (Live Multi-Device Sync)" : "Local Storage Mode"}
+                  </span>
+                </span>
+                <p className="text-[11px] text-slate-400">
+                  {firestoreStatus?.connected
+                    ? "Orders placed on any student's phone will appear here in real-time without reloading."
+                    : "To sync orders across all phones and laptops, enable Cloud Firestore Database in Firebase Console."}
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                onClick={() => handleSimulateOrder()}
+                disabled={isSimulating}
+                className="px-3 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-1.5 transition-all shadow-sm"
+              >
+                <Sparkles className="w-3.5 h-3.5" />
+                <span>{isSimulating ? "Adding..." : "⚡ Simulate Order"}</span>
+              </button>
+
+              {!firestoreStatus?.connected && (
+                <button
+                  onClick={() => setShowFirestoreHelp(true)}
+                  className="px-3 py-1.5 rounded-xl bg-amber-950/80 border border-amber-800 text-amber-300 font-bold text-xs hover:bg-amber-900 transition-colors"
+                >
+                  Firestore Setup Guide
+                </button>
+              )}
             </div>
           </div>
 
@@ -701,40 +835,242 @@ export default function AdminDashboardPage() {
           )}
 
           {/* ======================================================== */}
-          {/* TAB 5: ORDERS                                            */}
+          {/* TAB 5: ORDERS & LIVE KITCHEN DISPATCH                    */}
           {/* ======================================================== */}
           {activeTab === "orders" && (
-            <div className="space-y-4">
-              <h2 className="font-serif text-xl font-bold text-white">
-                WhatsApp Orders & Enquiries ({orders.length})
-              </h2>
+            <div className="space-y-6">
+              {/* Order Hub Header */}
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                <div>
+                  <h2 className="font-serif text-2xl font-bold text-white flex items-center gap-2">
+                    <span>Live Order Dispatch</span>
+                    <span className="text-xs bg-emerald-500/20 text-emerald-300 px-2.5 py-0.5 rounded-full border border-emerald-500/30 font-mono">
+                      {orders.length} total
+                    </span>
+                  </h2>
+                  <p className="text-xs text-slate-400 mt-1">
+                    Manage incoming student tiffins, update cooking status, and coordinate WhatsApp deliveries.
+                  </p>
+                </div>
 
-              <div className="space-y-3">
-                {orders.map((ord) => (
-                  <div
-                    key={ord.id}
-                    className="p-4 rounded-2xl bg-slate-800/80 border border-slate-700 flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={handleSimulateOrder}
+                    disabled={isSimulating}
+                    className="px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-1.5 transition-all shadow-md active:scale-95 cursor-pointer"
                   >
-                    <div className="space-y-1">
-                      <span className="font-bold text-sm text-white block">
-                        {ord.mealName} (x{ord.quantity})
-                      </span>
-                      <p className="text-xs text-slate-400">
-                        Student: <strong>{ord.userName}</strong> • Phone: {ord.userPhone || "Provided on WhatsApp"}
-                      </p>
-                      <p className="text-xs text-slate-400">
-                        Slot: {ord.mealType.toUpperCase()} on {formatDate(ord.preferredDate)} • Room: {ord.deliveryAddress}
-                      </p>
-                    </div>
+                    <Sparkles className="w-4 h-4" />
+                    <span>{isSimulating ? "Adding Order..." : "⚡ Simulate Incoming Order"}</span>
+                  </button>
+                </div>
+              </div>
 
-                    <div className="text-right">
-                      <span className="font-serif font-bold text-base text-brand-accent block">
-                        {formatCurrency(ord.amount)}
-                      </span>
-                      <span className="text-[11px] text-emerald-400">WhatsApp Opened</span>
-                    </div>
-                  </div>
+              {/* Status Filters */}
+              <div className="flex flex-wrap items-center gap-2 text-xs font-semibold">
+                {[
+                  { id: "all", label: `All Orders (${orders.length})` },
+                  { id: "confirmed", label: `Confirmed (${orders.filter((o) => o.status === "confirmed").length})` },
+                  { id: "preparing", label: `Cooking (${orders.filter((o) => o.status === "preparing").length})` },
+                  { id: "out_for_delivery", label: `Out for Delivery (${orders.filter((o) => o.status === "out_for_delivery").length})` },
+                  { id: "delivered", label: `Delivered (${orders.filter((o) => o.status === "delivered").length})` },
+                  { id: "whatsapp_opened", label: `WhatsApp Inquiries (${orders.filter((o) => o.status === "whatsapp_opened").length})` },
+                ].map((tab) => (
+                  <button
+                    key={tab.id}
+                    onClick={() => setOrderFilter(tab.id)}
+                    className={`px-3 py-1.5 rounded-xl transition-all cursor-pointer ${
+                      orderFilter === tab.id
+                        ? "bg-brand-primary text-white font-bold shadow-xs"
+                        : "bg-slate-800 text-slate-400 hover:text-white hover:bg-slate-700"
+                    }`}
+                  >
+                    {tab.label}
+                  </button>
                 ))}
+              </div>
+
+              {/* Orders List */}
+              <div className="space-y-4">
+                {orders
+                  .filter((ord) => orderFilter === "all" || ord.status === orderFilter)
+                  .map((ord) => {
+                    const statusColors: { [key: string]: { bg: string; text: string; border: string } } = {
+                      whatsapp_opened: { bg: "bg-amber-950/80", text: "text-amber-400", border: "border-amber-800" },
+                      pending: { bg: "bg-amber-950/80", text: "text-amber-400", border: "border-amber-800" },
+                      confirmed: { bg: "bg-blue-950/80", text: "text-blue-400", border: "border-blue-800" },
+                      preparing: { bg: "bg-purple-950/80", text: "text-purple-400", border: "border-purple-800" },
+                      out_for_delivery: { bg: "bg-orange-950/80", text: "text-orange-400", border: "border-orange-800" },
+                      delivered: { bg: "bg-emerald-950/80", text: "text-emerald-400", border: "border-emerald-800" },
+                      cancelled: { bg: "bg-red-950/80", text: "text-red-400", border: "border-red-800" },
+                    };
+                    const color = statusColors[ord.status] || statusColors.confirmed;
+
+                    const cleanedPhone = ord.userPhone ? ord.userPhone.replace(/[^0-9]/g, "") : "";
+                    const whatsappDirectUrl = `https://wa.me/${cleanedPhone}?text=${encodeURIComponent(
+                      `Hi ${ord.userName}, this is MessMate DBS Campus Support! We received your order for *${ord.mealName}* (x${ord.quantity}) scheduled for ${ord.mealType.toUpperCase()} at ${ord.deliveryAddress}. Total: ₹${ord.amount}. Status: ${ord.status.toUpperCase()}.`
+                    )}`;
+
+                    return (
+                      <div
+                        key={ord.id}
+                        className="p-5 rounded-3xl bg-slate-800/90 border border-slate-700 space-y-4 shadow-lg hover:border-slate-600 transition-all"
+                      >
+                        {/* Top: Header with ID, Status, Amount */}
+                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-slate-700/80">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-mono text-xs text-slate-400">
+                              #{ord.id.slice(-8)}
+                            </span>
+                            <span className="text-slate-600">•</span>
+                            <span className="text-xs text-slate-400 flex items-center gap-1">
+                              <Clock className="w-3.5 h-3.5 text-slate-400" />
+                              <span>{formatDate(ord.preferredDate)}</span>
+                            </span>
+                            <span className="text-slate-600">•</span>
+                            <span className="text-[11px] font-bold uppercase tracking-wider px-2 py-0.5 rounded bg-slate-700 text-slate-300">
+                              {ord.mealType}
+                            </span>
+                          </div>
+
+                          <div className="flex items-center gap-3">
+                            <span className={`text-xs font-bold px-3 py-1 rounded-full border uppercase ${color.bg} ${color.text} ${color.border}`}>
+                              {ord.status.replace("_", " ")}
+                            </span>
+                            <span className="font-serif font-bold text-lg text-brand-accent">
+                              {formatCurrency(ord.amount)}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Middle: Meal & Student Details */}
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+                          {/* Meal Info */}
+                          <div className="space-y-1">
+                            <span className="font-serif font-bold text-base text-white block">
+                              {ord.mealName}
+                            </span>
+                            <p className="text-slate-300">
+                              Quantity: <strong className="text-white">{ord.quantity} meal(s)</strong>
+                            </p>
+                            <p className="text-slate-400 flex items-center gap-1">
+                              <ChefHat className="w-3.5 h-3.5 text-emerald-400" />
+                              <span>Kitchen: {ord.kitchenName || "Partner Rasoi"}</span>
+                            </p>
+                            {ord.notes && (
+                              <p className="text-amber-300 italic pt-1">
+                                Special note: "{ord.notes}"
+                              </p>
+                            )}
+                          </div>
+
+                          {/* Student Details */}
+                          <div className="space-y-1 bg-slate-900/60 p-3 rounded-2xl border border-slate-800">
+                            <div className="flex items-center justify-between">
+                              <span className="font-bold text-white text-sm">
+                                {ord.userName}
+                              </span>
+                              {ord.userPhone && (
+                                <a
+                                  href={`tel:${ord.userPhone}`}
+                                  className="text-emerald-400 hover:underline flex items-center gap-1 font-mono text-[11px]"
+                                >
+                                  <Phone className="w-3 h-3" />
+                                  <span>{ord.userPhone}</span>
+                                </a>
+                              )}
+                            </div>
+
+                            <p className="text-slate-300 flex items-start gap-1 pt-1">
+                              <MapPin className="w-3.5 h-3.5 text-brand-accent shrink-0 mt-0.5" />
+                              <span>{ord.deliveryAddress || "DBS Campus / PG Corridor"}</span>
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* Bottom: Action Buttons */}
+                        <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-slate-700/60">
+                          {/* WhatsApp Direct Chat Button */}
+                          {cleanedPhone ? (
+                            <a
+                              href={whatsappDirectUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="px-3.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center gap-1.5 shadow-xs transition-colors cursor-pointer"
+                            >
+                              <MessageCircle className="w-3.5 h-3.5" />
+                              <span>Chat on WhatsApp</span>
+                            </a>
+                          ) : (
+                            <span className="text-[11px] text-slate-500 italic">
+                              Phone captured on initial WhatsApp ping
+                            </span>
+                          )}
+
+                          {/* Status Progression Controls */}
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="text-[11px] text-slate-400 font-medium mr-1">Update Status:</span>
+
+                            {ord.status !== "confirmed" && (
+                              <button
+                                onClick={() => handleUpdateOrderStatus(ord.id, "confirmed")}
+                                className="px-2.5 py-1 rounded-lg bg-blue-900/60 hover:bg-blue-800 text-blue-300 text-xs font-semibold transition-colors cursor-pointer"
+                              >
+                                Confirm
+                              </button>
+                            )}
+
+                            {ord.status !== "preparing" && (
+                              <button
+                                onClick={() => handleUpdateOrderStatus(ord.id, "preparing")}
+                                className="px-2.5 py-1 rounded-lg bg-purple-900/60 hover:bg-purple-800 text-purple-300 text-xs font-semibold transition-colors flex items-center gap-1 cursor-pointer"
+                              >
+                                <CookingPot className="w-3 h-3" />
+                                <span>Cooking</span>
+                              </button>
+                            )}
+
+                            {ord.status !== "out_for_delivery" && (
+                              <button
+                                onClick={() => handleUpdateOrderStatus(ord.id, "out_for_delivery")}
+                                className="px-2.5 py-1 rounded-lg bg-orange-900/60 hover:bg-orange-800 text-orange-300 text-xs font-semibold transition-colors flex items-center gap-1 cursor-pointer"
+                              >
+                                <Truck className="w-3 h-3" />
+                                <span>Out for Delivery</span>
+                              </button>
+                            )}
+
+                            {ord.status !== "delivered" && (
+                              <button
+                                onClick={() => handleUpdateOrderStatus(ord.id, "delivered")}
+                                className="px-2.5 py-1 rounded-lg bg-emerald-900/60 hover:bg-emerald-800 text-emerald-300 text-xs font-semibold transition-colors flex items-center gap-1 cursor-pointer"
+                              >
+                                <CheckCircle2 className="w-3 h-3" />
+                                <span>Delivered</span>
+                              </button>
+                            )}
+
+                            {ord.status !== "cancelled" && (
+                              <button
+                                onClick={() => handleUpdateOrderStatus(ord.id, "cancelled")}
+                                className="px-2 py-1 rounded-lg bg-red-950 hover:bg-red-900 text-red-400 text-xs transition-colors cursor-pointer"
+                                title="Cancel Order"
+                              >
+                                ✕
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+
+                {orders.length === 0 && (
+                  <div className="p-8 text-center bg-slate-800/40 rounded-3xl border border-slate-700 text-slate-400 space-y-2">
+                    <Clock className="w-8 h-8 mx-auto text-slate-500" />
+                    <p className="text-sm font-semibold">No orders in this filter</p>
+                    <p className="text-xs">Click "⚡ Simulate Incoming Order" above to test real-time orders!</p>
+                  </div>
+                )}
               </div>
             </div>
           )}
@@ -1022,18 +1358,88 @@ export default function AdminDashboardPage() {
                 <button
                   type="button"
                   onClick={() => setMealModalOpen(false)}
-                  className="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 hover:bg-slate-700 text-xs"
+                  className="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 hover:bg-slate-700 text-xs cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 rounded-xl bg-brand-primary text-white font-semibold text-xs"
+                  className="px-5 py-2 rounded-xl bg-brand-primary text-white font-semibold text-xs cursor-pointer"
                 >
                   Save Meal
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Cloud Firestore Multi-Device Sync Guide Modal */}
+      {showFirestoreHelp && (
+        <div className="fixed inset-0 z-50 overflow-y-auto bg-black/75 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-slate-900 border border-slate-700 rounded-3xl max-w-lg w-full p-6 sm:p-8 space-y-5 shadow-2xl relative">
+            <button
+              onClick={() => setShowFirestoreHelp(false)}
+              className="absolute top-5 right-5 text-slate-400 hover:text-white p-2 font-bold cursor-pointer"
+            >
+              ✕
+            </button>
+
+            <div className="space-y-1">
+              <span className="text-xs font-bold uppercase tracking-wider text-emerald-400">
+                Cloud Backend Setup
+              </span>
+              <h3 className="font-serif text-2xl font-bold text-white">
+                Sync Orders Across All Devices
+              </h3>
+              <p className="text-xs text-slate-300 leading-relaxed">
+                To have orders placed by students on their phones instantly appear here on your laptop in real-time, turn on Cloud Firestore in your Firebase project (takes 30 seconds):
+              </p>
+            </div>
+
+            <div className="space-y-3 text-xs">
+              <div className="p-3.5 bg-slate-800/80 rounded-2xl border border-slate-700 space-y-1">
+                <div className="flex items-center justify-between">
+                  <strong className="text-white">Step 1: Open Firebase Console</strong>
+                  <a
+                    href="https://console.firebase.google.com"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-emerald-400 font-bold underline inline-flex items-center gap-1"
+                  >
+                    <span>console.firebase.google.com</span>
+                    <ExternalLink className="w-3 h-3" />
+                  </a>
+                </div>
+                <p className="text-slate-400">
+                  Select your project: <code className="text-emerald-300 font-bold">mess-mate-anmolvercel</code>
+                </p>
+              </div>
+
+              <div className="p-3.5 bg-slate-800/80 rounded-2xl border border-slate-700 space-y-1">
+                <strong className="text-white">Step 2: Create Firestore Database</strong>
+                <p className="text-slate-400 leading-relaxed">
+                  In the left sidebar, click <strong>Build &gt; Firestore Database</strong>, then click the blue <strong>"Create database"</strong> button.
+                </p>
+              </div>
+
+              <div className="p-3.5 bg-emerald-950/40 rounded-2xl border border-emerald-800/80 space-y-1">
+                <strong className="text-emerald-300">Step 3: Select Test Mode & Location</strong>
+                <p className="text-slate-300 leading-relaxed">
+                  Choose <strong>"Start in test mode"</strong> (allows instant read/write) → Location: <strong>asia-south1 (Mumbai)</strong> → click <strong>Create</strong>!
+                </p>
+              </div>
+            </div>
+
+            <button
+              onClick={() => {
+                setShowFirestoreHelp(false);
+                checkFirestoreStatus().then((res) => setFirestoreStatus(res));
+              }}
+              className="w-full py-3 bg-brand-primary hover:bg-brand-secondary text-white font-bold rounded-xl text-xs transition-colors cursor-pointer"
+            >
+              I've Created It / Check Status Now
+            </button>
           </div>
         </div>
       )}

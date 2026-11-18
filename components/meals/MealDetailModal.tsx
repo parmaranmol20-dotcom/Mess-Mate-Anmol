@@ -29,6 +29,8 @@ export function MealDetailModal({ meal, onClose }: MealDetailModalProps) {
   const [mealSlot, setMealSlot] = useState<"lunch" | "dinner">(
     meal?.mealTiming === "dinner" ? "dinner" : "lunch"
   );
+  const [studentName, setStudentName] = useState<string>(profile?.name || "");
+  const [studentPhone, setStudentPhone] = useState<string>(profile?.phone || "");
   const [preferredDate, setPreferredDate] = useState<string>(
     new Date().toISOString().split("T")[0]
   );
@@ -51,10 +53,10 @@ export function MealDetailModal({ meal, onClose }: MealDetailModalProps) {
     setIsSubmitting(true);
     setStatusMessage(null);
 
-    // If user is not logged in, prompt or create temporary guest student session
-    const currentUserName = profile?.name || "Student Guest";
+    // Capture student contact information
+    const currentUserName = studentName.trim() || profile?.name || "Student Guest";
     const currentUserId = profile?.uid || "guest-" + Date.now();
-    const currentUserPhone = profile?.phone || "";
+    const currentUserPhone = studentPhone.trim() || profile?.phone || "";
 
     const res = await triggerWhatsAppOrder({
       userId: currentUserId,
@@ -198,6 +200,36 @@ export function MealDetailModal({ meal, onClose }: MealDetailModalProps) {
                 <Sparkles className="w-4 h-4 text-brand-accent" />
               </h4>
               <span className="text-xs text-brand-muted">Direct to kitchen partner</span>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-semibold text-brand-dark mb-1">
+                  Your Full Name
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={studentName}
+                  onChange={(e) => setStudentName(e.target.value)}
+                  placeholder="e.g. Aarav Sharma"
+                  className="w-full text-xs px-3.5 py-2.5 rounded-xl border border-brand-border bg-white text-brand-dark focus:outline-brand-primary"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-brand-dark mb-1">
+                  WhatsApp Contact Phone
+                </label>
+                <input
+                  type="tel"
+                  required
+                  value={studentPhone}
+                  onChange={(e) => setStudentPhone(e.target.value)}
+                  placeholder="e.g. +91 98765 43210"
+                  className="w-full text-xs px-3.5 py-2.5 rounded-xl border border-brand-border bg-white text-brand-dark focus:outline-brand-primary"
+                />
+              </div>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
