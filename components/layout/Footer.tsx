@@ -112,7 +112,7 @@ export function Footer() {
               </li>
               <li className="flex items-center gap-2.5 pt-1">
                 <a
-                  href={`https://wa.me/${process.env.NEXT_PUBLIC_WHATSAPP_NUMBER || "918859012345"}`}
+                  href={`https://wa.me/${process.env.NEXT_PUBLIC_WHATSAPP_NUMBER || "917983037542"}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-600/30 text-emerald-300 border border-emerald-500/30 text-xs font-medium hover:bg-emerald-600/50 transition-colors"

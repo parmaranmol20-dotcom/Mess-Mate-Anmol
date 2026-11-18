@@ -387,7 +387,7 @@ export default function StudentDashboardPage() {
                 </button>
 
                 <a
-                  href={`https://wa.me/${process.env.NEXT_PUBLIC_WHATSAPP_NUMBER || "918859012345"}`}
+                  href={`https://wa.me/${process.env.NEXT_PUBLIC_WHATSAPP_NUMBER || "917983037542"}`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="p-4 rounded-2xl bg-white border border-brand-border hover:border-brand-primary/40 shadow-xs hover:shadow-card transition-all text-left space-y-2"

@@ -14,13 +14,13 @@ export const BRAND = {
     "Prem Nagar Student Residences",
   ],
   supportEmail: "care@messmate.in",
-  supportPhone: "+91 88590 12345",
+  supportPhone: "+91 79830 37542",
   instagramHandle: "@messmate_dbs",
 };
 
 // WhatsApp Business configuration
 // Can be overridden via NEXT_PUBLIC_WHATSAPP_NUMBER in .env
-export const DEFAULT_WHATSAPP_NUMBER = process.env.NEXT_PUBLIC_WHATSAPP_NUMBER || "919876543210";
+export const DEFAULT_WHATSAPP_NUMBER = process.env.NEXT_PUBLIC_WHATSAPP_NUMBER || "917983037542";
 
 // Pricing rules & configurations
 export const PRICING_CONFIG = {

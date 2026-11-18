@@ -242,7 +242,7 @@ export default function HomePage() {
     },
     {
       q: "How can I contact support?",
-      a: "You can reach out to our DBS campus student support desk via WhatsApp at +91 88590 12345 or email care@messmate.in. We respond within minutes during meal hours.",
+      a: "You can reach out to our DBS campus student support desk via WhatsApp at +91 79830 37542 or email care@messmate.in. We respond within minutes during meal hours.",
     },
   ];
 

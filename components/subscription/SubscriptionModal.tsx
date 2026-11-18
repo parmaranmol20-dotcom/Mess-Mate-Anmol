@@ -106,7 +106,7 @@ export function SubscriptionModal({
         `_Please activate my plan and provide daily tiffin dispatch time!_`
       );
 
-      const whatsappNumber = process.env.NEXT_PUBLIC_WHATSAPP_NUMBER || "918859012345";
+      const whatsappNumber = process.env.NEXT_PUBLIC_WHATSAPP_NUMBER || "917983037542";
       const cleaned = whatsappNumber.replace(/[^0-9]/g, "");
       const whatsappUrl = `https://wa.me/${cleaned}?text=${whatsappText}`;
 
