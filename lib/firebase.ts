@@ -165,6 +165,20 @@ export async function clearCustomFirebaseConfig() {
   initFirebase();
 }
 
+export function getDb(): Firestore | undefined {
+  if (!db) {
+    initFirebase();
+  }
+  return db;
+}
+
+export function getFirebaseAuth(): Auth | undefined {
+  if (!auth) {
+    initFirebase();
+  }
+  return auth;
+}
+
 // Initial bootstrap
 if (typeof window !== "undefined" || process.env.NEXT_PUBLIC_FIREBASE_API_KEY || DEFAULT_FIREBASE_CREDENTIALS.apiKey) {
   initFirebase();
