@@ -155,6 +155,11 @@ export default function AdminDashboardPage() {
   }, []);
 
   const handleUpdateOrderStatus = async (orderId: string, status: OrderStatus) => {
+    // 1. Instant optimistic state update so UI updates with zero delay
+    setOrders((prev) =>
+      prev.map((o) => (o.id === orderId ? { ...o, status } : o))
+    );
+    // 2. Persist to Cloud Firestore and local storage
     await updateOrderStatus(orderId, status);
   };
 
@@ -194,8 +199,17 @@ export default function AdminDashboardPage() {
 
   // Handlers for Partner Applications
   const handlePartnerAction = async (id: string, status: "approved" | "rejected") => {
+    setPartnerApps((prev) =>
+      prev.map((a) => (a.id === id ? { ...a, status } : a))
+    );
     await updatePartnerApplicationStatus(id, status);
-    loadAllAdminData();
+  };
+
+  const handleSkipAction = async (id: string, status: "approved" | "rejected") => {
+    setSkips((prev) =>
+      prev.map((s) => (s.id === id ? { ...s, status } : s))
+    );
+    await updateSkipRequestStatus(id, status);
   };
 
   // Handlers for Meal Management
@@ -1013,9 +1027,10 @@ export default function AdminDashboardPage() {
                             {ord.status !== "confirmed" && (
                               <button
                                 onClick={() => handleUpdateOrderStatus(ord.id, "confirmed")}
-                                className="px-2.5 py-1 rounded-lg bg-blue-900/60 hover:bg-blue-800 text-blue-300 text-xs font-semibold transition-colors cursor-pointer"
+                                className="px-3 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold transition-all shadow-sm flex items-center gap-1 cursor-pointer"
                               >
-                                Confirm
+                                <CheckCircle2 className="w-3.5 h-3.5" />
+                                <span>Approve Order</span>
                               </button>
                             )}
 

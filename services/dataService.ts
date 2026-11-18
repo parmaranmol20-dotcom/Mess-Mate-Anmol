@@ -265,18 +265,17 @@ export async function updatePartnerApplicationStatus(
   id: string,
   status: "approved" | "rejected"
 ): Promise<void> {
-  if (db && isFirebaseConfigured) {
-    try {
-      await updateDoc(doc(db, "partnerApplications", id), { status });
-      return;
-    } catch (e) {
-      console.error("Firestore update partner app error:", e);
-    }
-  }
-
   const current = getLocal<PartnerApplication[]>(LOCAL_STORAGE_KEYS.partnerApps, DEFAULT_DEMO_PARTNER_APPS);
   const updated = current.map((a) => (a.id === id ? { ...a, status } : a));
   setLocal(LOCAL_STORAGE_KEYS.partnerApps, updated);
+
+  if (db && isFirebaseConfigured) {
+    try {
+      await setDoc(doc(db, "partnerApplications", id), { status }, { merge: true });
+    } catch (e) {
+      console.warn("Firestore update partner app error:", e);
+    }
+  }
 }
 
 // ==========================================
@@ -320,20 +319,23 @@ export async function updateOrderStatus(
   orderId: string,
   status: OrderStatus
 ): Promise<void> {
-  if (db && isFirebaseConfigured) {
-    try {
-      await updateDoc(doc(db, "orders", orderId), { status });
-    } catch (e) {
-      console.warn("Firestore updateOrderStatus fallback to local:", e);
-    }
-  }
-
+  // 1. Immediately update local storage
   const current = getLocal<OrderEnquiry[]>(LOCAL_STORAGE_KEYS.orders, DEFAULT_DEMO_ORDERS);
   const updated = current.map((o) => (o.id === orderId ? { ...o, status } : o));
   setLocal(LOCAL_STORAGE_KEYS.orders, updated);
 
   if (typeof window !== "undefined") {
     window.dispatchEvent(new CustomEvent("messmate_order_updated", { detail: { id: orderId, status } }));
+  }
+
+  // 2. Persist to Cloud Firestore using setDoc with merge:true (creates doc if missing)
+  if (db && isFirebaseConfigured) {
+    try {
+      const orderDocRef = doc(db, "orders", orderId);
+      await setDoc(orderDocRef, { status, updatedAt: new Date().toISOString() }, { merge: true });
+    } catch (e) {
+      console.warn("Firestore updateOrderStatus fallback to local storage:", e);
+    }
   }
 }
 
@@ -488,18 +490,17 @@ export async function updateSubscriptionStatus(
   id: string,
   status: SubscriptionStatus
 ): Promise<void> {
-  if (db && isFirebaseConfigured) {
-    try {
-      await updateDoc(doc(db, "subscriptions", id), { status });
-      return;
-    } catch (e) {
-      console.error("Firestore updateSubscriptionStatus error:", e);
-    }
-  }
-
   const current = getLocal<Subscription[]>(LOCAL_STORAGE_KEYS.subscriptions, [DEFAULT_DEMO_SUBSCRIPTION]);
   const updated = current.map((s) => (s.id === id ? { ...s, status } : s));
   setLocal(LOCAL_STORAGE_KEYS.subscriptions, updated);
+
+  if (db && isFirebaseConfigured) {
+    try {
+      await setDoc(doc(db, "subscriptions", id), { status }, { merge: true });
+    } catch (e) {
+      console.warn("Firestore updateSubscriptionStatus error:", e);
+    }
+  }
 }
 
 // ==========================================
@@ -573,18 +574,17 @@ export async function updateSkipRequestStatus(
   id: string,
   status: "approved" | "rejected"
 ): Promise<void> {
-  if (db && isFirebaseConfigured) {
-    try {
-      await updateDoc(doc(db, "skipRequests", id), { status });
-      return;
-    } catch (e) {
-      console.error("Firestore updateSkipRequestStatus error:", e);
-    }
-  }
-
   const current = getLocal<SkipRequest[]>(LOCAL_STORAGE_KEYS.skipRequests, DEFAULT_DEMO_SKIPS);
   const updated = current.map((s) => (s.id === id ? { ...s, status } : s));
   setLocal(LOCAL_STORAGE_KEYS.skipRequests, updated);
+
+  if (db && isFirebaseConfigured) {
+    try {
+      await setDoc(doc(db, "skipRequests", id), { status }, { merge: true });
+    } catch (e) {
+      console.warn("Firestore updateSkipRequestStatus error:", e);
+    }
+  }
 }
 
 // ==========================================
